@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Story JSON Reader</title>
+  <style>
+    :root{
+      --bg:#080b10; --panel:#111722; --panel2:#171f2d; --text:#eef2f8; --muted:#9da8ba;
+      --line:#293348; --accent:#ff3b2f; --accent2:#ff9b46; --good:#52df8e; --warn:#ffd166;
+      --danger:#ff6278; --shadow:0 18px 55px rgba(0,0,0,.35); --radius:18px;
+      --fontSize:18px; --readerWidth:920px;
+    }
+    [data-theme="light"]{
+      --bg:#f4f6fb; --panel:#ffffff; --panel2:#f8fafc; --text:#101827; --muted:#526173;
+      --line:#d9e1ec; --accent:#b91c1c; --accent2:#c76b13; --shadow:0 18px 55px rgba(16,24,39,.12);
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0; min-height:100vh; color:var(--text);
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+      background:
+        radial-gradient(circle at 6% 0%, rgba(255,59,47,.16), transparent 24rem),
+        radial-gradient(circle at 100% 100%, rgba(255,155,70,.14), transparent 28rem),
+        var(--bg);
+    }
+    button,input,select,textarea{font:inherit}
+    button{
+      border:1px solid var(--line); background:var(--panel2); color:var(--text);
+      padding:.65rem .85rem; border-radius:12px; cursor:pointer; transition:.16s;
+    }
+    button:hover{border-color:var(--accent); transform:translateY(-1px)}
+    button.primary{border:0; color:#fff; font-weight:800; background:linear-gradient(135deg,var(--accent),var(--accent2))}
+    button.ghost{background:transparent}
+    button.danger{border-color:rgba(255,98,120,.75); color:var(--danger)}
+    input,select,textarea{
+      width:100%; border:1px solid var(--line); border-radius:12px; background:var(--panel2);
+      color:var(--text); padding:.72rem .85rem; outline:none;
+    }
+    textarea{min-height:280px; resize:vertical; line-height:1.55}
+    code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .app{max-width:1540px; margin:0 auto; padding:1rem; display:grid; grid-template-columns:340px 1fr; gap:1rem}
+    .card,.sidebar,.main,.toolbar,.builder,.notice{
+      background:rgba(17,23,34,.9); border:1px solid var(--line); border-radius:var(--radius);
+      box-shadow:var(--shadow); backdrop-filter:blur(14px);
+    }
+    [data-theme="light"] .card,[data-theme="light"] .sidebar,[data-theme="light"] .main,
+    [data-theme="light"] .toolbar,[data-theme="light"] .builder,[data-theme="light"] .notice{
+      background:rgba(255,255,255,.93);
+    }
+    .sidebar{position:sticky; top:1rem; height:calc(100vh - 2rem); overflow:hidden; display:flex; flex-direction:column}
+    .brand{padding:1rem; border-bottom:1px solid var(--line)}
+    .brand h1{font-size:1.28rem; margin:.15rem 0 .35rem}
+    .brand p{color:var(--muted); margin:0; line-height:1.38; font-size:.92rem}
+    .side-section{padding:1rem; border-bottom:1px solid var(--line)}
+    .chapter-list{padding:.5rem; overflow:auto; flex:1}
+    .chapter-item{
+      width:100%; text-align:left; display:block; margin:.25rem 0; padding:.75rem .8rem;
+      border-radius:14px; background:transparent; border:1px solid transparent; color:var(--text);
+    }
+    .chapter-item:hover{transform:none; background:var(--panel2); border-color:var(--line)}
+    .chapter-item.active{background:linear-gradient(135deg,rgba(255,59,47,.19),rgba(255,155,70,.12)); border-color:rgba(255,59,47,.45)}
+    .chapter-item small{display:block; color:var(--muted); margin-top:.25rem}
+    .main{min-height:calc(100vh - 2rem); overflow:hidden}
+    .topbar{display:flex; justify-content:space-between; gap:.55rem; flex-wrap:wrap; align-items:center; padding:1rem; border-bottom:1px solid var(--line)}
+    .topbar .group{display:flex; gap:.5rem; flex-wrap:wrap; align-items:center}
+    .reader-shell{padding:1rem}
+    .progress-wrap{height:8px; border-radius:999px; background:var(--panel2); border:1px solid var(--line); overflow:hidden; max-width:var(--readerWidth); margin:0 auto 1rem}
+    .progress{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent2))}
+    .toolbar{display:grid; grid-template-columns:1.2fr 1fr 1fr 1fr; gap:.8rem; padding:1rem; max-width:var(--readerWidth); margin:0 auto 1rem}
+    .toolbar label,.builder label{display:block; color:var(--muted); font-size:.82rem; margin:0 0 .35rem}
+    .reader{max-width:var(--readerWidth); margin:0 auto; font-size:var(--fontSize); line-height:1.85}
+    .reader h2{font-size:2.05rem; line-height:1.12; margin:.4rem 0 .25rem}
+    .reader .meta{color:var(--muted); padding-bottom:1rem; margin-bottom:1.3rem; border-bottom:1px solid var(--line)}
+    .reader p{white-space:pre-wrap; margin:0 0 1.12rem}
+    .reader .empty{padding:1rem; color:var(--muted); border:1px dashed var(--line); border-radius:14px}
+    .notice{max-width:var(--readerWidth); margin:0 auto 1rem; padding:1rem; color:var(--muted); line-height:1.45}
+    .notice strong{color:var(--text)}
+    .builder{max-width:var(--readerWidth); margin:1rem auto 0; padding:1rem; display:none}
+    .builder.show{display:block}
+    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:.8rem}
+    .grid4{display:grid; grid-template-columns:repeat(4,1fr); gap:.8rem}
+    .row{display:flex; flex-wrap:wrap; align-items:center; gap:.5rem}
+    .hint{color:var(--muted); font-size:.92rem; line-height:1.45}
+    .setup{display:none}
+    .setup.show{display:block}
+    .pre{
+      white-space:pre-wrap; background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+      padding:1rem; overflow:auto; color:var(--text); font-size:.92rem; line-height:1.45;
+    }
+    .toast{
+      position:fixed; right:1rem; bottom:1rem; z-index:20; background:var(--panel); color:var(--text);
+      border:1px solid var(--line); border-radius:14px; padding:.82rem 1rem; box-shadow:var(--shadow);
+      opacity:0; transform:translateY(10px); pointer-events:none; transition:.2s;
+    }
+    .toast.show{opacity:1; transform:translateY(0)}
+    @media(max-width:940px){
+      .app{grid-template-columns:1fr; padding:.6rem}
+      .sidebar{position:relative; top:0; height:auto; max-height:48vh}
+      .toolbar{grid-template-columns:1fr 1fr}
+      .grid4{grid-template-columns:1fr 1fr}
+      .reader h2{font-size:1.55rem}
+    }
+    @media(max-width:540px){
+      .toolbar,.grid2,.grid4{grid-template-columns:1fr}
+      .topbar .group, .topbar button{width:100%}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>🔥 Story JSON Reader</h1>
+      <p>Folder-based story reader. Add chapters as JSON files, update the manifest, refresh, and keep reading.</p>
+    </div>
+
+    <div class="side-section">
+      <label class="hint">Story folder</label>
+      <select id="storySelect"></select>
+      <div class="row" style="margin-top:.65rem">
+        <button id="reloadBtn" class="primary">Refresh JSON</button>
+        <button id="setupBtn">Setup</button>
+      </div>
+    </div>
+
+    <div class="side-section">
+      <input id="searchBox" placeholder="Search this story..." />
+    </div>
+
+    <div id="chapterList" class="chapter-list"></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="group">
+        <button id="prevBtn">← Prev</button>
+        <button id="nextBtn">Next →</button>
+        <button id="builderBtn" class="primary">+ JSON Builder</button>
+      </div>
+      <div class="group">
+        <button id="speakBtn" class="primary">▶ Read</button>
+        <button id="pauseBtn">⏸ Pause</button>
+        <button id="stopBtn">■ Stop</button>
+        <button id="themeBtn">🌙 Theme</button>
+      </div>
+    </div>
+
+    <div class="reader-shell">
+      <div class="progress-wrap"><div id="progress" class="progress"></div></div>
+
+      <section class="toolbar">
+        <div>
+          <label>Voice</label>
+          <select id="voiceSelect"></select>
+        </div>
+        <div>
+          <label>Speed <span id="rateLabel">1.0</span></label>
+          <input id="rate" type="range" min="0.6" max="1.7" value="1" step="0.1" />
+        </div>
+        <div>
+          <label>Font size <span id="fontLabel">18</span>px</label>
+          <input id="fontSize" type="range" min="15" max="30" value="18" step="1" />
+        </div>
+        <div>
+          <label>Reader width <span id="widthLabel">920</span>px</label>
+          <input id="readerWidth" type="range" min="640" max="1200" value="920" step="20" />
+        </div>
+      </section>
+
+      <section id="setupPanel" class="notice setup"></section>
+
+      <article id="reader" class="reader"></article>
+
+      <section id="builder" class="builder">
+        <h3>Chapter JSON Builder</h3>
+        <p class="hint">This creates a chapter JSON file you can download, then upload into your story folder, like <span class="mono">maelstory/chap3.json</span>. After that, add the filename to <span class="mono">maelstory/manifest.json</span>.</p>
+        <div class="grid4">
+          <div><label>Arc</label><input id="bArc" value="Arc 5" /></div>
+          <div><label>Rank / order</label><input id="bRank" type="number" value="3" /></div>
+          <div><label>Chapter number</label><input id="bChapter" type="number" value="3" /></div>
+          <div><label>Filename</label><input id="bFile" value="chap3.json" /></div>
+        </div>
+        <div style="margin-top:.8rem"><label>Title</label><input id="bTitle" value="New Chapter Title" /></div>
+        <div style="margin-top:.8rem"><label>Content</label><textarea id="bContent">Paste your chapter text here.</textarea></div>
+        <div class="row" style="margin-top:.8rem">
+          <button id="downloadJsonBtn" class="primary">Download Chapter JSON</button>
+          <button id="copyJsonBtn">Copy JSON</button>
+          <button id="closeBuilderBtn">Close</button>
+        </div>
+        <p class="hint">Manifest line to add: <span id="manifestLine" class="mono"></span></p>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  // SIMPLE GITHUB SETUP:
+  // Root:
+  //   index.html
+  //   stories.json
+  //   /maelstory/manifest.json
+  //   /maelstory/chap1.json
+  //   /maelstory/chap2.json
+  //
+  // Add new chapters by uploading maelstory/chap3.json and adding "chap3.json" to maelstory/manifest.json.
+
+  const SETTINGS_KEY = "story_json_reader_settings_v2";
+  const DEFAULT_STORY = { id:"maelstory", title:"Mael Story", folder:"maelstory", manifest:"manifest.json" };
+
+  let stories = [];
+  let currentStory = DEFAULT_STORY;
+  let chapters = [];
+  let currentIndex = 0;
+  let cacheBust = Date.now();
+  let utterQueue = [];
+  let speakingIndex = 0;
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    storySelect:$("storySelect"), reloadBtn:$("reloadBtn"), setupBtn:$("setupBtn"),
+    searchBox:$("searchBox"), chapterList:$("chapterList"),
+    prevBtn:$("prevBtn"), nextBtn:$("nextBtn"),
+    builderBtn:$("builderBtn"), builder:$("builder"), closeBuilderBtn:$("closeBuilderBtn"),
+    reader:$("reader"), setupPanel:$("setupPanel"), progress:$("progress"),
+    speakBtn:$("speakBtn"), pauseBtn:$("pauseBtn"), stopBtn:$("stopBtn"), voiceSelect:$("voiceSelect"),
+    rate:$("rate"), rateLabel:$("rateLabel"), fontSize:$("fontSize"), fontLabel:$("fontLabel"),
+    readerWidth:$("readerWidth"), widthLabel:$("widthLabel"), themeBtn:$("themeBtn"),
+    bArc:$("bArc"), bRank:$("bRank"), bChapter:$("bChapter"), bFile:$("bFile"), bTitle:$("bTitle"), bContent:$("bContent"),
+    downloadJsonBtn:$("downloadJsonBtn"), copyJsonBtn:$("copyJsonBtn"), manifestLine:$("manifestLine"),
+    toast:$("toast")
+  };
+
+  init();
+
+  async function init(){
+    loadSettings();
+    bindEvents();
+    loadVoices();
+    if("speechSynthesis" in window) speechSynthesis.onvoiceschanged = loadVoices;
+    await loadStories();
+    await loadSelectedStory();
+    updateBuilderManifestLine();
+  }
+
+  function bindEvents(){
+    els.storySelect.addEventListener("change", async () => {
+      const id = els.storySelect.value;
+      currentStory = stories.find(s => s.id === id) || DEFAULT_STORY;
+      currentIndex = 0;
+      saveSettings();
+      await loadSelectedStory();
+    });
+    els.reloadBtn.addEventListener("click", async () => {
+      cacheBust = Date.now();
+      await loadStories();
+      await loadSelectedStory();
+      toast("Reloaded JSON files.");
+    });
+    els.setupBtn.addEventListener("click", toggleSetup);
+    els.searchBox.addEventListener("input", renderChapterList);
+    els.prevBtn.addEventListener("click", () => changeChapter(currentIndex - 1));
+    els.nextBtn.addEventListener("click", () => changeChapter(currentIndex + 1));
+    els.builderBtn.addEventListener("click", () => els.builder.classList.toggle("show"));
+    els.closeBuilderBtn.addEventListener("click", () => els.builder.classList.remove("show"));
+    els.speakBtn.addEventListener("click", speakCurrent);
+    els.pauseBtn.addEventListener("click", pauseResume);
+    els.stopBtn.addEventListener("click", stopSpeaking);
+    els.themeBtn.addEventListener("click", toggleTheme);
+    els.rate.addEventListener("input", () => { els.rateLabel.textContent = Number(els.rate.value).toFixed(1); saveSettings(); });
+    els.fontSize.addEventListener("input", () => { applySettings(); saveSettings(); });
+    els.readerWidth.addEventListener("input", () => { applySettings(); saveSettings(); });
+    els.voiceSelect.addEventListener("change", saveSettings);
+    els.downloadJsonBtn.addEventListener("click", downloadChapterJson);
+    els.copyJsonBtn.addEventListener("click", copyChapterJson);
+    ["bArc","bRank","bChapter","bFile","bTitle","bContent"].forEach(id => els[id].addEventListener("input", updateBuilderManifestLine));
+    window.addEventListener("scroll", updateProgress, {passive:true});
+    document.addEventListener("keydown", e => {
+      if(["INPUT","TEXTAREA","SELECT"].includes(e.target.tagName)) return;
+      if(e.key === "ArrowLeft") changeChapter(currentIndex - 1);
+      if(e.key === "ArrowRight") changeChapter(currentIndex + 1);
+      if(e.key === " ") { e.preventDefault(); pauseResume(); }
+    });
+  }
+
+  async function loadStories(){
+    try{
+      const data = await fetchJSON("./stories.json");
+      stories = normalizeStories(data);
+      if(!stories.length) stories = [DEFAULT_STORY];
+    }catch(e){
+      stories = [DEFAULT_STORY];
+    }
+
+    const params = new URLSearchParams(location.search);
+    const requested = params.get("story");
+    const saved = getSettings().storyId;
+    const chosen = stories.find(s => s.id === requested) || stories.find(s => s.id === saved) || stories[0] || DEFAULT_STORY;
+    currentStory = chosen;
+    renderStorySelect();
+  }
+
+  function normalizeStories(data){
+    if(Array.isArray(data)){
+      return data.map((s, i) => typeof s === "string"
+        ? { id:s, title:s, folder:s, manifest:"manifest.json" }
+        : {
+          id:s.id || s.folder || ("story"+i),
+          title:s.title || s.name || s.id || s.folder || ("Story "+(i+1)),
+          folder:s.folder || s.id || "",
+          manifest:s.manifest || "manifest.json"
+        }
+      ).filter(s => s.folder);
+    }
+    if(data && Array.isArray(data.stories)) return normalizeStories(data.stories);
+    return [];
+  }
+
+  function renderStorySelect(){
+    els.storySelect.innerHTML = "";
+    stories.forEach(s => {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.title || s.id;
+      if(s.id === currentStory.id) opt.selected = true;
+      els.storySelect.appendChild(opt);
+    });
+  }
+
+  async function loadSelectedStory(){
+    stopSpeaking();
+    chapters = [];
+    renderReaderLoading();
+
+    try{
+      const manifestPath = `./${trimSlashes(currentStory.folder)}/${currentStory.manifest || "manifest.json"}`;
+      const manifest = await fetchJSON(manifestPath);
+      const chapterRefs = normalizeManifest(manifest);
+
+      const loaded = [];
+      for(let i=0; i<chapterRefs.length; i++){
+        const ref = chapterRefs[i];
+        try{
+          const chapterPath = `./${trimSlashes(currentStory.folder)}/${ref.file}`;
+          const raw = await fetchJSON(chapterPath);
+          loaded.push(normalizeChapter(raw, ref, i, chapterPath));
+        }catch(err){
+          loaded.push({
+            id:"missing_"+i, arc:"Missing file", title:ref.file,
+            rank:ref.rank ?? i+1, chapter:ref.chapter ?? i+1,
+            content:`Could not load ${ref.file}. Check the filename in ${currentStory.folder}/manifest.json.`,
+            path:ref.file
+          });
+        }
+      }
+
+      chapters = loaded.sort((a,b) =>
+        Number(a.rank ?? 999999) - Number(b.rank ?? 999999) ||
+        Number(a.chapter ?? 999999) - Number(b.chapter ?? 999999)
+      );
+      currentIndex = Math.min(currentIndex, Math.max(0, chapters.length - 1));
+      renderChapterList();
+      renderReader();
+      hideSetup();
+    }catch(e){
+      chapters = [];
+      renderChapterList();
+      renderReaderError(e);
+      showSetup();
+    }
+  }
+
+  function normalizeManifest(manifest){
+    let list = [];
+    if(Array.isArray(manifest)) list = manifest;
+    else if(manifest && Array.isArray(manifest.chapters)) list = manifest.chapters;
+    else return [];
+
+    return list.map((item, i) => {
+      if(typeof item === "string") return { file:item, rank:i+1, chapter:i+1 };
+      return {
+        file:item.file || item.path || item.url,
+        rank:item.rank ?? item.order ?? i+1,
+        chapter:item.chapter ?? i+1,
+        title:item.title || ""
+      };
+    }).filter(x => x.file);
+  }
+
+  function normalizeChapter(raw, ref, i, path){
+    return {
+      id: raw.id || path || ("chapter_"+i),
+      arc: raw.arc || raw.book || raw.section || currentStory.title || "",
+      title: raw.title || ref.title || ("Chapter " + (raw.chapter || ref.chapter || i+1)),
+      rank: raw.rank ?? ref.rank ?? i+1,
+      chapter: raw.chapter ?? ref.chapter ?? i+1,
+      summary: raw.summary || "",
+      content: normalizeContent(raw.content ?? raw.text ?? raw.body ?? ""),
+      path
+    };
+  }
+
+  function normalizeContent(content){
+    if(Array.isArray(content)) return content.join("\n\n");
+    return String(content || "");
+  }
+
+  async function fetchJSON(path){
+    const sep = path.includes("?") ? "&" : "?";
+    const res = await fetch(path + sep + "v=" + cacheBust, {cache:"no-store"});
+    if(!res.ok) throw new Error(`${res.status} ${res.statusText} loading ${path}`);
+    return await res.json();
+  }
+
+  function renderReaderLoading(){
+    els.reader.innerHTML = `<div class="empty">Loading story JSON...</div>`;
+  }
+
+  function renderReaderError(e){
+    els.reader.innerHTML = `
+      <h2>Could not load story folder</h2>
+      <div class="meta">${escapeHTML(currentStory.folder || "maelstory")}</div>
+      <div class="empty">
+        The reader tried to load <strong>${escapeHTML(currentStory.folder)}/manifest.json</strong> and chapter JSON files.<br><br>
+        Error: ${escapeHTML(e.message || String(e))}
+      </div>
+    `;
+  }
+
+  function renderChapterList(){
+    const q = els.searchBox.value.trim().toLowerCase();
+    els.chapterList.innerHTML = "";
+    if(!chapters.length){
+      els.chapterList.innerHTML = `<div class="hint" style="padding:.9rem">No chapters loaded yet.</div>`;
+      return;
+    }
+    chapters.forEach((ch, i) => {
+      const hay = `${ch.arc} ${ch.title} ${ch.summary} ${ch.content}`.toLowerCase();
+      if(q && !hay.includes(q)) return;
+      const btn = document.createElement("button");
+      btn.className = "chapter-item" + (i === currentIndex ? " active" : "");
+      btn.innerHTML = `<strong>${escapeHTML(ch.title)}</strong><small>${escapeHTML(ch.arc || "")} · ${escapeHTML(ch.path || "")}</small>`;
+      btn.onclick = () => changeChapter(i);
+      els.chapterList.appendChild(btn);
+    });
+  }
+
+  function renderReader(){
+    const ch = chapters[currentIndex];
+    if(!ch){
+      els.reader.innerHTML = `<div class="empty">No chapters loaded. Open Setup to see the folder format.</div>`;
+      return;
+    }
+    const content = ch.content.trim()
+      ? ch.content.split(/\n{2,}/).map(p => `<p>${escapeHTML(p)}</p>`).join("")
+      : `<div class="empty">This chapter has no content.</div>`;
+
+    els.reader.innerHTML = `
+      <h2>${escapeHTML(ch.title)}</h2>
+      <div class="meta">
+        ${escapeHTML(ch.arc || currentStory.title || "")}
+        · Rank ${escapeHTML(ch.rank ?? "")}
+        · Chapter ${escapeHTML(ch.chapter ?? currentIndex + 1)}
+        · ${escapeHTML(ch.path || "")}
+      </div>
+      ${ch.summary ? `<div class="notice"><strong>Summary:</strong> ${escapeHTML(ch.summary)}</div>` : ""}
+      ${content}
+    `;
+    document.title = `${ch.title} — Story JSON Reader`;
+    renderChapterList();
+    updateProgress();
+  }
+
+  function changeChapter(i){
+    if(i < 0 || i >= chapters.length) return;
+    currentIndex = i;
+    stopSpeaking();
+    renderReader();
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function toggleSetup(){
+    els.setupPanel.classList.toggle("show");
+    if(els.setupPanel.classList.contains("show")) fillSetup();
+  }
+  function showSetup(){ els.setupPanel.classList.add("show"); fillSetup(); }
+  function hideSetup(){ els.setupPanel.classList.remove("show"); }
+
+  function fillSetup(){
+    const folder = currentStory.folder || "maelstory";
+    els.setupPanel.innerHTML = `
+      <strong>GitHub Pages folder setup</strong><br><br>
+      Put this beside <span class="mono">index.html</span>:<br>
+      <div class="pre">stories.json
+${folder}/manifest.json
+${folder}/chap1.json
+${folder}/chap2.json</div>
+      <strong>stories.json</strong>
+      <div class="pre">[
+  {
+    "id": "${escapeHTML(currentStory.id || "maelstory")}",
+    "title": "${escapeHTML(currentStory.title || "Mael Story")}",
+    "folder": "${escapeHTML(folder)}",
+    "manifest": "manifest.json"
+  }
+]</div>
+      <strong>${escapeHTML(folder)}/manifest.json</strong>
+      <div class="pre">[
+  "chap1.json",
+  "chap2.json",
+  "chap3.json"
+]</div>
+      <strong>${escapeHTML(folder)}/chap3.json</strong>
+      <div class="pre">{
+  "arc": "Arc 5",
+  "rank": 3,
+  "chapter": 3,
+  "title": "New Chapter Title",
+  "content": "Paste the full chapter text here."
+}</div>
+      <span class="hint">GitHub Pages cannot automatically scan folders, so every new chapter file must be added to the folder's manifest.json.</span>
+    `;
+  }
+
+  function buildChapterJSON(){
+    return {
+      arc: els.bArc.value.trim(),
+      rank: Number(els.bRank.value || 0),
+      chapter: Number(els.bChapter.value || 0),
+      title: els.bTitle.value.trim() || "Untitled Chapter",
+      content: els.bContent.value
+    };
+  }
+
+  function updateBuilderManifestLine(){
+    const file = els.bFile.value.trim() || "chap3.json";
+    els.manifestLine.textContent = `"${file}"`;
+  }
+
+  function downloadChapterJson(){
+    const filename = sanitizeFilename(els.bFile.value.trim() || "chapter.json");
+    const data = JSON.stringify(buildChapterJSON(), null, 2);
+    downloadText(filename, data, "application/json");
+    toast("Chapter JSON downloaded.");
+  }
+
+  async function copyChapterJson(){
+    const data = JSON.stringify(buildChapterJSON(), null, 2);
+    try{
+      await navigator.clipboard.writeText(data);
+      toast("Chapter JSON copied.");
+    }catch(e){
+      alert(data);
+    }
+  }
+
+  function downloadText(filename, text, type){
+    const blob = new Blob([text], {type});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function sanitizeFilename(name){
+    return name.replace(/[\\/:*?"<>|]+/g, "_").replace(/\.json$/i, "") + ".json";
+  }
+
+  function loadSettings(){
+    const s = getSettings();
+    if(s.theme) document.documentElement.dataset.theme = s.theme;
+    if(s.fontSize) els.fontSize.value = s.fontSize;
+    if(s.readerWidth) els.readerWidth.value = s.readerWidth;
+    if(s.rate) els.rate.value = s.rate;
+    applySettings();
+  }
+
+  function getSettings(){
+    try{return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")}catch(e){return {}}
+  }
+
+  function saveSettings(){
+    const s = {
+      theme: document.documentElement.dataset.theme || "dark",
+      fontSize: els.fontSize.value,
+      readerWidth: els.readerWidth.value,
+      rate: els.rate.value,
+      voice: els.voiceSelect.value || "",
+      storyId: currentStory.id || DEFAULT_STORY.id
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  }
+
+  function applySettings(){
+    const fs = els.fontSize.value || 18;
+    const rw = els.readerWidth.value || 920;
+    document.documentElement.style.setProperty("--fontSize", fs + "px");
+    document.documentElement.style.setProperty("--readerWidth", rw + "px");
+    els.fontLabel.textContent = fs;
+    els.widthLabel.textContent = rw;
+    els.rateLabel.textContent = Number(els.rate.value || 1).toFixed(1);
+  }
+
+  function toggleTheme(){
+    const cur = document.documentElement.dataset.theme || "dark";
+    document.documentElement.dataset.theme = cur === "light" ? "dark" : "light";
+    saveSettings();
+  }
+
+  function loadVoices(){
+    if(!("speechSynthesis" in window)){
+      els.voiceSelect.innerHTML = `<option>Text-to-speech unsupported</option>`;
+      return;
+    }
+    const saved = getSettings().voice || "";
+    const voices = speechSynthesis.getVoices();
+    els.voiceSelect.innerHTML = "";
+    voices.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})`;
+      if(v.name === saved) opt.selected = true;
+      els.voiceSelect.appendChild(opt);
+    });
+  }
+
+  function speakCurrent(){
+    if(!("speechSynthesis" in window)){
+      toast("Text-to-speech is not supported in this browser.");
+      return;
+    }
+    const ch = chapters[currentIndex];
+    if(!ch) return;
+    stopSpeaking();
+    const selected = window.getSelection().toString().trim();
+    const text = selected || `${ch.arc}. ${ch.title}. ${ch.content}`;
+    utterQueue = splitForSpeech(cleanSpeechText(text));
+    speakingIndex = 0;
+    speakNext();
+  }
+
+  function splitForSpeech(text){
+    const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+    const chunks = [];
+    let cur = "";
+    for(const s of sentences){
+      if((cur + " " + s).length > 240){
+        if(cur.trim()) chunks.push(cur.trim());
+        cur = s;
+      }else cur += " " + s;
+    }
+    if(cur.trim()) chunks.push(cur.trim());
+    return chunks;
+  }
+
+  function cleanSpeechText(t){
+    return String(t).replace(/[•#*_`>\[\]{}]/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  function speakNext(){
+    if(speakingIndex >= utterQueue.length) return;
+    const u = new SpeechSynthesisUtterance(utterQueue[speakingIndex]);
+    const voice = speechSynthesis.getVoices().find(v => v.name === els.voiceSelect.value);
+    if(voice) u.voice = voice;
+    u.rate = Number(els.rate.value || 1);
+    u.pitch = 1;
+    u.onend = () => { speakingIndex++; speakNext(); };
+    u.onerror = () => { speakingIndex++; speakNext(); };
+    speechSynthesis.speak(u);
+  }
+
+  function pauseResume(){
+    if(!("speechSynthesis" in window)) return;
+    if(speechSynthesis.speaking && !speechSynthesis.paused){
+      speechSynthesis.pause();
+      toast("Paused.");
+    }else if(speechSynthesis.paused){
+      speechSynthesis.resume();
+      toast("Resumed.");
+    }else speakCurrent();
+  }
+
+  function stopSpeaking(){
+    if("speechSynthesis" in window) speechSynthesis.cancel();
+    utterQueue = [];
+    speakingIndex = 0;
+  }
+
+  function updateProgress(){
+    const doc = document.documentElement;
+    const max = doc.scrollHeight - doc.clientHeight;
+    const pct = max > 0 ? (doc.scrollTop / max) * 100 : 0;
+    els.progress.style.width = pct + "%";
+  }
+
+  function toast(msg){
+    els.toast.textContent = msg;
+    els.toast.classList.add("show");
+    clearTimeout(window.__toast);
+    window.__toast = setTimeout(() => els.toast.classList.remove("show"), 2300);
+  }
+
+  function trimSlashes(s){ return String(s || "").replace(/^\/+|\/+$/g, ""); }
+  function escapeHTML(str){
+    return String(str ?? "")
+      .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+  }
+</script>
+</body>
+</html>
