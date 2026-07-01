@@ -1,0 +1,8 @@
+{
+  "arc": "Chapter Sample",
+  "rank": 2,
+  "chapter": 2,
+  "title": "Add Your Next Chapter Here",
+  "summary": "Template chapter. Replace this with your next draft.",
+  "content": "Paste your next chapter here.\n\nTo add more:\n1. Create maelstory/chap3.json.\n2. Add \"chap3.json\" to maelstory/manifest.json.\n3. Commit to GitHub.\n4. Open the site and press Refresh JSON.\n\nThe reader will load the new chapter automatically from the manifest."
+}
